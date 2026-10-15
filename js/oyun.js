@@ -104,7 +104,7 @@ const ui = {
   kutu: $('#diyalog'), kim: $('#diyalog .kim'), metin: $('#diyalog .metin'), secim: $('#diyalog .secimler'),
   ipucu: $('#ipucu'), env: $('#envanter'), perde: $('#perde'),
 };
-let ilerle = null;
+let ilerle = null, yazici = null;
 
 function satirGoster(n) {
   return new Promise(coz => {
@@ -115,11 +115,11 @@ function satirGoster(n) {
     konusanAyarla(n.k);
     const metin = n.m; let i = 0, bitti = false;
     ui.metin.textContent = '';
-    const yaz = setInterval(() => {
-      i += 2; ui.metin.textContent = metin.slice(0, i);
+    yazici = dt => {
+      i += dt * 85; ui.metin.textContent = metin.slice(0, Math.floor(i));
       if (i >= metin.length) tamam();
-    }, 22);
-    const tamam = () => { clearInterval(yaz); ui.metin.textContent = metin; bitti = true; ui.kutu.classList.add('bitti'); if (konusan) konusan.konusuyor = false; };
+    };
+    const tamam = () => { yazici = null; ui.metin.textContent = metin; bitti = true; ui.kutu.classList.add('bitti'); if (konusan) konusan.konusuyor = false; };
     ilerle = () => {
       if (!bitti) { tamam(); return; }
       ilerle = null; ses.blip(520); coz();
@@ -230,10 +230,10 @@ function esyaAciklama(id) {
 function esyaEkle(id) { if (!D.env.includes(id)) D.env.push(id); ses.esya(); envanterCiz(id); }
 function esyaSil(id) { D.env = D.env.filter(e => e !== id); envanterCiz(); }
 
+let perdeOp = 1, perdeHedef = 1, perdeHiz = 1;
 function perde(acik, renk = 'siyah', sure = 1.2) {
-  ui.perde.style.transitionDuration = sure + 's';
   ui.perde.classList.toggle('beyaz', renk === 'beyaz');
-  ui.perde.style.opacity = acik ? 1 : 0;
+  perdeHedef = acik ? 1 : 0; perdeHiz = 1 / Math.max(.01, sure);
   return bekle(sure);
 }
 
@@ -465,6 +465,8 @@ function sahneKur() {
 
 async function oyunuBaslat(kayit) {
   D = kayit || yeniDurum();
+  ui.kutu.hidden = true; ilerle = null; yazici = null; secimSec = null; aniIlerle = null; biletKapa = null;
+  for (const id of ['#ani', '#bilet', '#incele', '#tabela']) $(id).hidden = true;
   oyunda = true; kilit = 1; diyalogAcik = false; sonrakiler = []; bekleyenAnilar = []; zamanlayicilar.length = 0;
   aktifSahne = sahne; aktifKamera = kamera;
   $('#son').hidden = true; $('#son').classList.remove('kunyede');
@@ -702,13 +704,22 @@ function kapilarGuncelle(dt) {
 }
 
 let miyavZaman = 3, son = performance.now(), fpsOlc = 0, fpsSay = 0, fpsT = 0;
+let manuel = false, sanalSimdi = 0;
 function dongu(simdi) {
   requestAnimationFrame(dongu);
   const gercek = Math.min(.05, (simdi - son) / 1000);
   fpsSay++; fpsT += (simdi - son) / 1000; if (fpsT > 1) { fpsOlc = Math.round(fpsSay / fpsT); fpsSay = 0; fpsT = 0; }
   son = simdi;
+  if (!manuel) kare(gercek, simdi);
+}
+function kare(gercek, simdi) {
   const dt = duraklat ? 0 : gercek * olcek;
   zaman += dt;
+  if (yazici) yazici(gercek * olcek);
+  if (perdeOp !== perdeHedef) {
+    perdeOp = perdeHedef > perdeOp ? Math.min(perdeHedef, perdeOp + gercek * olcek * perdeHiz) : Math.max(perdeHedef, perdeOp - gercek * olcek * perdeHiz);
+    ui.perde.style.opacity = perdeOp * perdeOp * (3 - 2 * perdeOp);
+  }
   // zamanlayıcılar
   for (let i = zamanlayicilar.length - 1; i >= 0; i--) { const z = zamanlayicilar[i]; z.s -= dt; if (z.s <= 0) { zamanlayicilar.splice(i, 1); z.f(); } }
   // tren hızı
@@ -834,6 +845,8 @@ window.SonTren = {
   incelemeKapat: () => { const el = $('#incele'); if (!el.hidden) el.querySelector('button').click(); },
   kamera, disari, K, oyuncu,
   // tanıtım videosu için
+  manuel: v => { manuel = v; }, perde: (a, s) => perde(a, 'siyah', s),
+  adim: dt => { sanalSimdi += dt * 1000; kare(dt, sanalSimdi); },
   yukle: k => oyunuBaslat(k), durakGel: n => durakGel(n), aniGoster: id => aniGoster(ANILAR[id]),
   ekranXY(hedef) {
     let p;
